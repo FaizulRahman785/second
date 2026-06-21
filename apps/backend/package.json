@@ -1,0 +1,16 @@
+{
+  "name": "coaching-backend",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Backend API for Coaching Management Platform",
+  "main": "dist/server.js",
+  "scripts": {
+    "dev": "node --watch src/server.ts",
+    "start": "node dist/server.js",
+    "build": "tsc",
+    "type-check": "tsc --noEmit"
+  },
+  "keywords": ["coaching", "education", "api"],
+  "author": "",
+  "license": "MIT"
+}

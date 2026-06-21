@@ -1,0 +1,472 @@
+import { Router } from 'express';
+import { eq, desc, count, and, sql, inArray } from 'drizzle-orm';
+import { db, schema } from '../db/index.js';
+import { authenticate, requireTeacher } from '../middleware/auth.js';
+import { asyncHandler, ApiError } from '../middleware/error.js';
+import { emitToUser, emitToUsers } from '../ws/wsManager.js';
+
+const router = Router();
+router.use(authenticate, requireTeacher);
+
+// ── Dashboard ──────────────────────────────────────────────────────────────
+router.get('/dashboard', asyncHandler(async (req, res) => {
+  const teacherId = req.user!.id;
+  const [myBatches, materials, tests, pendingDoubts, upcomingClasses] = await Promise.all([
+    db.select({ total: count() }).from(schema.batchTeachers).where(eq(schema.batchTeachers.teacherId, teacherId)),
+    db.select({ total: count() }).from(schema.materials).where(eq(schema.materials.uploadedBy, teacherId)),
+    db.select({ total: count() }).from(schema.tests).where(eq(schema.tests.teacherId, teacherId)),
+    db.select({ total: count() }).from(schema.doubts).where(eq(schema.doubts.status, 'open')),
+    db.select({
+      id: schema.liveClasses.id, title: schema.liveClasses.title,
+      scheduledDate: schema.liveClasses.scheduledDate, scheduledTime: schema.liveClasses.scheduledTime,
+      meetingLink: schema.liveClasses.meetingLink, batchName: schema.batches.name,
+    })
+      .from(schema.liveClasses)
+      .leftJoin(schema.batches, eq(schema.liveClasses.batchId, schema.batches.id))
+      .where(and(eq(schema.liveClasses.teacherId, teacherId), eq(schema.liveClasses.status, 'scheduled')))
+      .orderBy(schema.liveClasses.scheduledDate)
+      .limit(5),
+  ]);
+
+  res.json({
+    success: true,
+    data: {
+      myBatches: myBatches[0]?.total ?? 0,
+      materialsUploaded: materials[0]?.total ?? 0,
+      testsCreated: tests[0]?.total ?? 0,
+      pendingDoubts: pendingDoubts[0]?.total ?? 0,
+      upcomingClasses,
+    },
+  });
+}));
+
+// ── My Batches ─────────────────────────────────────────────────────────────
+router.get('/batches', asyncHandler(async (req, res) => {
+  const teacherId = req.user!.id;
+  const rows = await db
+    .select({
+      id: schema.batches.id, name: schema.batches.name, timing: schema.batches.timing,
+      status: schema.batches.status, description: schema.batches.description,
+      courseId: schema.batches.courseId, courseName: schema.courses.name,
+    })
+    .from(schema.batchTeachers)
+    .innerJoin(schema.batches, eq(schema.batchTeachers.batchId, schema.batches.id))
+    .leftJoin(schema.courses, eq(schema.batches.courseId, schema.courses.id))
+    .where(eq(schema.batchTeachers.teacherId, teacherId));
+
+  res.json({ success: true, data: rows });
+}));
+
+// ── Materials ──────────────────────────────────────────────────────────────
+router.get('/materials', asyncHandler(async (req, res) => {
+  const data = await db
+    .select({
+      id: schema.materials.id, title: schema.materials.title, description: schema.materials.description,
+      fileUrl: schema.materials.fileUrl, fileType: schema.materials.fileType, fileName: schema.materials.fileName,
+      fileSize: schema.materials.fileSize, visibility: schema.materials.visibility, createdAt: schema.materials.createdAt,
+      courseName: schema.courses.name,
+    })
+    .from(schema.materials)
+    .leftJoin(schema.courses, eq(schema.materials.courseId, schema.courses.id))
+    .where(eq(schema.materials.uploadedBy, req.user!.id))
+    .orderBy(desc(schema.materials.createdAt));
+  res.json({ success: true, data });
+}));
+
+router.post('/materials', asyncHandler(async (req, res) => {
+  const { title, description, fileUrl, fileType, fileName, fileSize, courseId, batchId } = req.body;
+  if (!title || !fileUrl || !fileName) throw new ApiError(400, 'title, fileUrl, fileName required');
+  const [mat] = await db.insert(schema.materials).values({
+    title, description, fileUrl, fileType: fileType || 'document', fileName,
+    fileSize, courseId, batchId, visibility: true, uploadedBy: req.user!.id,
+  }).returning();
+
+  // Notify students in the batch about the new material
+  if (batchId) {
+    const batchStudents = await db
+      .select({ studentId: schema.batchStudents.studentId })
+      .from(schema.batchStudents)
+      .where(eq(schema.batchStudents.batchId, batchId));
+
+    if (batchStudents.length > 0) {
+      const studentIds = batchStudents.map(s => s.studentId);
+      const notifications = await db.insert(schema.notifications).values(
+        studentIds.map(sid => ({
+          receiverId: sid, senderId: req.user!.id, type: 'general',
+          title: 'New Material Available',
+          message: `"${title}" has been added to your course materials`,
+        }))
+      ).returning();
+      const event = { id: notifications[0]?.id, title: 'New Material Available', message: `"${title}" has been added to your course materials`, type: 'general', createdAt: new Date().toISOString(), isRead: false };
+      emitToUsers(studentIds, event);
+    }
+  }
+
+  res.status(201).json({ success: true, data: mat });
+}));
+
+// ── Live Classes ───────────────────────────────────────────────────────────
+router.get('/live-classes', asyncHandler(async (req, res) => {
+  const data = await db
+    .select({
+      id: schema.liveClasses.id, title: schema.liveClasses.title, description: schema.liveClasses.description,
+      scheduledDate: schema.liveClasses.scheduledDate, scheduledTime: schema.liveClasses.scheduledTime,
+      duration: schema.liveClasses.duration, status: schema.liveClasses.status,
+      meetingLink: schema.liveClasses.meetingLink, batchName: schema.batches.name,
+    })
+    .from(schema.liveClasses)
+    .leftJoin(schema.batches, eq(schema.liveClasses.batchId, schema.batches.id))
+    .where(eq(schema.liveClasses.teacherId, req.user!.id))
+    .orderBy(desc(schema.liveClasses.scheduledDate));
+  res.json({ success: true, data });
+}));
+
+router.post('/live-classes', asyncHandler(async (req, res) => {
+  const { title, description, batchId, meetingLink, scheduledDate, scheduledTime, duration } = req.body;
+  if (!title || !batchId || !meetingLink || !scheduledDate || !scheduledTime) {
+    throw new ApiError(400, 'title, batchId, meetingLink, scheduledDate, scheduledTime required');
+  }
+  const [cls] = await db.insert(schema.liveClasses).values({
+    title, description, teacherId: req.user!.id, batchId, meetingLink,
+    scheduledDate: new Date(scheduledDate), scheduledTime, duration,
+  }).returning();
+  res.status(201).json({ success: true, data: cls });
+}));
+
+router.put('/live-classes/:id', asyncHandler(async (req, res) => {
+  const { title, description, meetingLink, scheduledDate, scheduledTime, duration, status } = req.body;
+  const [prev] = await db.select({ status: schema.liveClasses.status, batchId: schema.liveClasses.batchId, title: schema.liveClasses.title })
+    .from(schema.liveClasses)
+    .where(and(eq(schema.liveClasses.id, req.params.id), eq(schema.liveClasses.teacherId, req.user!.id))).limit(1);
+
+  await db.update(schema.liveClasses).set({
+    title, description, meetingLink,
+    scheduledDate: scheduledDate ? new Date(scheduledDate) : undefined,
+    scheduledTime, duration, status, updatedAt: new Date(),
+  }).where(and(eq(schema.liveClasses.id, req.params.id), eq(schema.liveClasses.teacherId, req.user!.id)));
+
+  // SSE: notify batch students when class goes live
+  if (status === 'live' && prev?.status !== 'live' && prev?.batchId) {
+    const batchStudents = await db
+      .select({ studentId: schema.batchStudents.studentId })
+      .from(schema.batchStudents)
+      .where(eq(schema.batchStudents.batchId, prev.batchId));
+
+    if (batchStudents.length > 0) {
+      const studentIds = batchStudents.map(s => s.studentId);
+      const classTitle = title || prev.title;
+      const notifications = await db.insert(schema.notifications).values(
+        studentIds.map(sid => ({
+          receiverId: sid, senderId: req.user!.id, type: 'class',
+          title: '🔴 Class is Live Now!',
+          message: `"${classTitle}" has started. Join now!`,
+        }))
+      ).returning();
+      const event = { id: notifications[0]?.id, title: '🔴 Class is Live Now!', message: `"${classTitle}" has started. Join now!`, type: 'class', createdAt: new Date().toISOString(), isRead: false };
+      emitToUsers(studentIds, event);
+    }
+  }
+
+  res.json({ success: true, message: 'Class updated' });
+}));
+
+router.delete('/live-classes/:id', asyncHandler(async (req, res) => {
+  await db.delete(schema.liveClasses).where(and(eq(schema.liveClasses.id, req.params.id), eq(schema.liveClasses.teacherId, req.user!.id)));
+  res.json({ success: true, message: 'Class deleted' });
+}));
+
+// ── Tests ──────────────────────────────────────────────────────────────────
+router.get('/tests', asyncHandler(async (req, res) => {
+  const data = await db
+    .select({
+      id: schema.tests.id, title: schema.tests.title, description: schema.tests.description,
+      duration: schema.tests.duration, totalMarks: schema.tests.totalMarks, passingMarks: schema.tests.passingMarks,
+      status: schema.tests.status, startDate: schema.tests.startDate, endDate: schema.tests.endDate,
+      createdAt: schema.tests.createdAt, batchName: schema.batches.name, courseName: schema.courses.name,
+    })
+    .from(schema.tests)
+    .leftJoin(schema.batches, eq(schema.tests.batchId, schema.batches.id))
+    .leftJoin(schema.courses, eq(schema.tests.courseId, schema.courses.id))
+    .where(eq(schema.tests.teacherId, req.user!.id))
+    .orderBy(desc(schema.tests.createdAt));
+  res.json({ success: true, data });
+}));
+
+router.post('/tests', asyncHandler(async (req, res) => {
+  const { title, description, batchId, courseId, duration, totalMarks, passingMarks, startDate, endDate, questions: qs } = req.body;
+  if (!title || !duration || !totalMarks) throw new ApiError(400, 'title, duration, totalMarks required');
+  const [test] = await db.insert(schema.tests).values({
+    title, description, batchId, courseId, teacherId: req.user!.id,
+    duration: parseInt(duration), totalMarks: parseInt(totalMarks),
+    passingMarks: passingMarks ? parseInt(passingMarks) : null,
+    startDate: startDate ? new Date(startDate) : null,
+    endDate: endDate ? new Date(endDate) : null,
+  }).returning();
+  if (qs?.length) {
+    await db.insert(schema.questions).values(qs.map((q: any, i: number) => ({
+      testId: test.id, questionText: q.questionText, questionType: q.questionType || 'mcq',
+      marks: parseInt(q.marks || '1'), options: q.options, correctAnswer: q.correctAnswer, order: i,
+    })));
+  }
+  res.status(201).json({ success: true, data: test });
+}));
+
+router.put('/tests/:id', asyncHandler(async (req, res) => {
+  const { title, description, status, startDate, endDate } = req.body;
+  await db.update(schema.tests).set({ title, description, status, startDate, endDate, updatedAt: new Date() })
+    .where(and(eq(schema.tests.id, req.params.id), eq(schema.tests.teacherId, req.user!.id)));
+  res.json({ success: true, message: 'Test updated' });
+}));
+
+// ── Assignments ────────────────────────────────────────────────────────────
+router.get('/assignments', asyncHandler(async (req, res) => {
+  const data = await db
+    .select({
+      id: schema.assignments.id, title: schema.assignments.title, description: schema.assignments.description,
+      dueDate: schema.assignments.dueDate, totalMarks: schema.assignments.totalMarks, createdAt: schema.assignments.createdAt,
+      batchName: schema.batches.name, courseName: schema.courses.name,
+    })
+    .from(schema.assignments)
+    .leftJoin(schema.batches, eq(schema.assignments.batchId, schema.batches.id))
+    .leftJoin(schema.courses, eq(schema.assignments.courseId, schema.courses.id))
+    .where(eq(schema.assignments.teacherId, req.user!.id))
+    .orderBy(desc(schema.assignments.createdAt));
+  res.json({ success: true, data });
+}));
+
+router.post('/assignments', asyncHandler(async (req, res) => {
+  const { title, description, batchId, courseId, dueDate, totalMarks } = req.body;
+  if (!title || !description || !dueDate) throw new ApiError(400, 'title, description, dueDate required');
+  const [asgn] = await db.insert(schema.assignments).values({
+    title, description, batchId, courseId, teacherId: req.user!.id,
+    dueDate: new Date(dueDate), totalMarks,
+  }).returning();
+  res.status(201).json({ success: true, data: asgn });
+}));
+
+// ── Assignment Submissions / Grading ───────────────────────────────────────
+router.get('/assignments/:id/submissions', asyncHandler(async (req, res) => {
+  const [assignment] = await db.select().from(schema.assignments)
+    .where(and(eq(schema.assignments.id, req.params.id), eq(schema.assignments.teacherId, req.user!.id))).limit(1);
+  if (!assignment) throw new ApiError(404, 'Assignment not found');
+
+  const data = await db
+    .select({
+      id: schema.assignmentSubmissions.id,
+      studentId: schema.assignmentSubmissions.studentId,
+      studentName: schema.users.name,
+      studentEmail: schema.users.email,
+      submissionText: schema.assignmentSubmissions.submissionText,
+      submissionUrl: schema.assignmentSubmissions.submissionUrl,
+      submittedAt: schema.assignmentSubmissions.submittedAt,
+      status: schema.assignmentSubmissions.status,
+      marksAwarded: schema.assignmentSubmissions.marksAwarded,
+      feedback: schema.assignmentSubmissions.feedback,
+      gradedAt: schema.assignmentSubmissions.gradedAt,
+    })
+    .from(schema.assignmentSubmissions)
+    .leftJoin(schema.users, eq(schema.assignmentSubmissions.studentId, schema.users.id))
+    .where(eq(schema.assignmentSubmissions.assignmentId, req.params.id))
+    .orderBy(desc(schema.assignmentSubmissions.submittedAt));
+
+  res.json({ success: true, data, assignment });
+}));
+
+router.patch('/assignments/:id/submissions/:submissionId/grade', asyncHandler(async (req, res) => {
+  const { marksAwarded, feedback } = req.body;
+  if (marksAwarded === undefined) throw new ApiError(400, 'marksAwarded is required');
+
+  const [assignment] = await db.select().from(schema.assignments)
+    .where(and(eq(schema.assignments.id, req.params.id), eq(schema.assignments.teacherId, req.user!.id))).limit(1);
+  if (!assignment) throw new ApiError(403, 'Not your assignment');
+
+  const [submission] = await db.select({ studentId: schema.assignmentSubmissions.studentId })
+    .from(schema.assignmentSubmissions).where(eq(schema.assignmentSubmissions.id, req.params.submissionId)).limit(1);
+
+  await db.update(schema.assignmentSubmissions).set({
+    marksAwarded: parseInt(marksAwarded), feedback, status: 'graded',
+    gradedAt: new Date(), gradedBy: req.user!.id,
+  }).where(eq(schema.assignmentSubmissions.id, req.params.submissionId));
+
+  // Notify student of graded assignment
+  if (submission?.studentId) {
+    const [notif] = await db.insert(schema.notifications).values({
+      receiverId: submission.studentId, senderId: req.user!.id, type: 'assignment',
+      title: 'Assignment Graded',
+      message: `Your assignment "${assignment.title}" has been graded. You received ${marksAwarded} marks.${feedback ? ` Feedback: ${feedback}` : ''}`,
+    }).returning();
+    emitToUser(submission.studentId, { id: notif.id, title: notif.title, message: notif.message, type: 'assignment', createdAt: new Date().toISOString(), isRead: false });
+  }
+
+  res.json({ success: true, message: 'Submission graded' });
+}));
+
+// ── Doubts ─────────────────────────────────────────────────────────────────
+router.get('/doubts', asyncHandler(async (req, res) => {
+  const data = await db
+    .select({
+      id: schema.doubts.id, question: schema.doubts.question, status: schema.doubts.status,
+      imageUrl: schema.doubts.imageUrl, createdAt: schema.doubts.createdAt,
+      studentName: schema.users.name, subjectId: schema.doubts.subjectId,
+    })
+    .from(schema.doubts)
+    .leftJoin(schema.users, eq(schema.doubts.studentId, schema.users.id))
+    .orderBy(desc(schema.doubts.createdAt));
+  res.json({ success: true, data });
+}));
+
+router.post('/doubts/:id/reply', asyncHandler(async (req, res) => {
+  const { reply } = req.body;
+  if (!reply) throw new ApiError(400, 'reply is required');
+
+  // Fetch the doubt to get the student's id and question preview
+  const [doubt] = await db
+    .select({ studentId: schema.doubts.studentId, question: schema.doubts.question })
+    .from(schema.doubts)
+    .where(eq(schema.doubts.id, req.params.id));
+
+  if (!doubt) throw new ApiError(404, 'Doubt not found');
+
+  await db.insert(schema.doubtReplies).values({ doubtId: req.params.id, teacherId: req.user!.id, reply });
+  await db.update(schema.doubts).set({ status: 'answered', updatedAt: new Date() }).where(eq(schema.doubts.id, req.params.id));
+
+  // Persist a notification record so the student sees it in the bell
+  const questionPreview = doubt.question.length > 60 ? doubt.question.slice(0, 60) + '…' : doubt.question;
+  const [notif] = await db.insert(schema.notifications).values({
+    receiverId: doubt.studentId,
+    senderId: req.user!.id,
+    type: 'doubt',
+    title: 'Your doubt has been answered',
+    message: `A teacher replied to: "${questionPreview}"`,
+  }).returning();
+
+  // Push real-time WebSocket event to the student
+  emitToUser(doubt.studentId, {
+    id: notif.id,
+    title: notif.title,
+    message: notif.message,
+    type: 'doubt',
+    doubtId: req.params.id,
+    createdAt: notif.createdAt,
+    isRead: false,
+  });
+
+  res.json({ success: true, message: 'Reply posted' });
+}));
+
+// ── Test Questions ─────────────────────────────────────────────────────────
+router.get('/tests/:id/questions', asyncHandler(async (req, res) => {
+  const data = await db.select().from(schema.questions).where(eq(schema.questions.testId, req.params.id)).orderBy(schema.questions.order);
+  res.json({ success: true, data });
+}));
+
+router.post('/tests/:id/questions', asyncHandler(async (req, res) => {
+  const { questions: qs } = req.body;
+  if (!qs?.length) throw new ApiError(400, 'questions array is required');
+  await db.delete(schema.questions).where(eq(schema.questions.testId, req.params.id));
+  const inserted = await db.insert(schema.questions).values(
+    qs.map((q: any, i: number) => ({
+      testId: req.params.id,
+      questionText: q.questionText,
+      questionType: q.questionType || 'mcq',
+      marks: parseInt(q.marks || '1'),
+      options: q.options,
+      correctAnswer: q.correctAnswer,
+      order: i,
+    }))
+  ).returning();
+  res.json({ success: true, data: inserted });
+}));
+
+// ── Analytics (N+1 fixed) ──────────────────────────────────────────────────
+router.get('/analytics', asyncHandler(async (req, res) => {
+  const teacherId = req.user!.id;
+
+  const [batchRows, [{ total: totalMaterials }], testRows, [{ total: totalDoubts }], [{ total: totalLiveClasses }], [{ total: pendingDoubts }]] = await Promise.all([
+    db.select({ id: schema.batches.id, name: schema.batches.name })
+      .from(schema.batchTeachers)
+      .innerJoin(schema.batches, eq(schema.batchTeachers.batchId, schema.batches.id))
+      .where(eq(schema.batchTeachers.teacherId, teacherId)),
+    db.select({ total: count() }).from(schema.materials).where(eq(schema.materials.uploadedBy, teacherId)),
+    db.select({ id: schema.tests.id, title: schema.tests.title, totalMarks: schema.tests.totalMarks, status: schema.tests.status, createdAt: schema.tests.createdAt })
+      .from(schema.tests).where(eq(schema.tests.teacherId, teacherId)).orderBy(desc(schema.tests.createdAt)),
+    db.select({ total: count() }).from(schema.doubts),
+    db.select({ total: count() }).from(schema.liveClasses).where(eq(schema.liveClasses.teacherId, teacherId)),
+    db.select({ total: count() }).from(schema.doubts).where(eq(schema.doubts.status, 'open')),
+  ]);
+
+  // Fix N+1: get all batch student counts in a single query using SQL aggregation
+  const batchIds = batchRows.map(b => b.id);
+  let batchesWithStudents = batchRows.map(b => ({ ...b, studentCount: 0 }));
+
+  if (batchIds.length > 0) {
+    const batchCounts = await db
+      .select({
+        batchId: schema.batchStudents.batchId,
+        studentCount: count(),
+      })
+      .from(schema.batchStudents)
+      .where(inArray(schema.batchStudents.batchId, batchIds))
+      .groupBy(schema.batchStudents.batchId);
+
+    const countMap = new Map(batchCounts.map(r => [r.batchId, r.studentCount]));
+    batchesWithStudents = batchRows.map(b => ({ ...b, studentCount: countMap.get(b.id) ?? 0 }));
+  }
+
+  const totalStudents = batchesWithStudents.reduce((s, b) => s + b.studentCount, 0);
+
+  // Fix N+1: get all test result summaries in a single query using SQL aggregation
+  const recentTests = testRows.slice(0, 6);
+  const testResultSummary: { testTitle: string; attempts: number; avgScore: number }[] = [];
+
+  if (recentTests.length > 0) {
+    const testIds = recentTests.map(t => t.id);
+    const resultAggregates = await db
+      .select({
+        testId: schema.testResults.testId,
+        attempts: count(),
+        avgScore: sql<number>`ROUND(AVG(${schema.testResults.percentage}), 1)`,
+      })
+      .from(schema.testResults)
+      .where(inArray(schema.testResults.testId, testIds))
+      .groupBy(schema.testResults.testId);
+
+    const resultMap = new Map(resultAggregates.map(r => [r.testId, r]));
+    for (const t of recentTests) {
+      const agg = resultMap.get(t.id);
+      testResultSummary.push({
+        testTitle: t.title,
+        attempts: agg?.attempts ?? 0,
+        avgScore: agg?.avgScore ?? 0,
+      });
+    }
+  }
+
+  const resolvedDoubts = totalDoubts - pendingDoubts;
+
+  res.json({
+    success: true,
+    data: {
+      totalStudents, totalBatches: batchRows.length, totalTests: testRows.length,
+      totalMaterials, totalLiveClasses, totalDoubts, pendingDoubts, resolvedDoubts,
+      batches: batchesWithStudents, testResultSummary,
+    },
+  });
+}));
+
+// ── Test Results ───────────────────────────────────────────────────────────
+router.get('/tests/:testId/results', asyncHandler(async (req, res) => {
+  const data = await db
+    .select({
+      id: schema.testResults.id, marksObtained: schema.testResults.marksObtained,
+      percentage: schema.testResults.percentage, status: schema.testResults.status,
+      submittedAt: schema.testResults.submittedAt, studentName: schema.users.name,
+    })
+    .from(schema.testResults)
+    .leftJoin(schema.users, eq(schema.testResults.studentId, schema.users.id))
+    .where(eq(schema.testResults.testId, req.params.testId))
+    .orderBy(desc(schema.testResults.submittedAt));
+  res.json({ success: true, data });
+}));
+
+export default router;

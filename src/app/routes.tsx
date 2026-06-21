@@ -1,0 +1,166 @@
+import { createBrowserRouter, Navigate } from 'react-router';
+import { useAuth } from './contexts/AuthContext';
+import { LoginPage } from './components/auth/LoginPage';
+import { AdminLayout } from './components/layout/AdminLayout';
+import { TeacherLayout } from './components/layout/TeacherLayout';
+import { StudentLayout } from './components/layout/StudentLayout';
+
+// Admin Pages
+import { AdminDashboard } from './pages/admin/AdminDashboard';
+import { StudentsPage } from './pages/admin/StudentsPage';
+import { TeachersPage } from './pages/admin/TeachersPage';
+import { CoursesPage } from './pages/admin/CoursesPage';
+import { BatchesPage } from './pages/admin/BatchesPage';
+import { AdminMaterialsPage } from './pages/admin/AdminMaterialsPage';
+import { AdminTestsPage } from './pages/admin/AdminTestsPage';
+import { FeesPage } from './pages/admin/FeesPage';
+import { SettingsPage } from './pages/admin/SettingsPage';
+import { NotificationBroadcastPage } from './pages/admin/NotificationBroadcastPage';
+import { AuditLogsPage } from './pages/admin/AuditLogsPage';
+
+// Teacher Pages
+import { TeacherDashboard } from './pages/teacher/TeacherDashboard';
+import { MyBatchesPage } from './pages/teacher/MyBatchesPage';
+import { TeacherMaterialsPage } from './pages/teacher/TeacherMaterialsPage';
+import { LiveClassesPage } from './pages/teacher/LiveClassesPage';
+import { TeacherTestsPage } from './pages/teacher/TeacherTestsPage';
+import { AssignmentsPage } from './pages/teacher/AssignmentsPage';
+import { DoubtsPage } from './pages/teacher/DoubtsPage';
+import { AnalyticsPage } from './pages/teacher/AnalyticsPage';
+import { TeacherProfilePage } from './pages/teacher/TeacherProfilePage';
+
+// Student Pages
+import { StudentDashboard } from './pages/student/StudentDashboard';
+import { CoursesPage as StudentCoursesPage } from './pages/student/CoursesPage';
+import { MaterialsPage } from './pages/student/MaterialsPage';
+import { StudentLiveClassesPage } from './pages/student/StudentLiveClassesPage';
+import { StudentTestsPage } from './pages/student/StudentTestsPage';
+import { ResultsPage } from './pages/student/ResultsPage';
+import { StudentAssignmentsPage } from './pages/student/StudentAssignmentsPage';
+import { StudentDoubtsPage } from './pages/student/StudentDoubtsPage';
+import { StudentFeesPage } from './pages/student/StudentFeesPage';
+import { ProfilePage } from './pages/student/ProfilePage';
+
+// Protected Route Component
+const ProtectedRoute = ({ children, allowedRoles }: { children: React.ReactNode; allowedRoles: string[] }) => {
+  const { user, isAuthenticated } = useAuth();
+
+  if (!isAuthenticated || !user) {
+    return <Navigate to="/" replace />;
+  }
+
+  if (!allowedRoles.includes(user.role)) {
+    if (user.role === 'admin') return <Navigate to="/admin" replace />;
+    if (user.role === 'teacher') return <Navigate to="/teacher" replace />;
+    if (user.role === 'student') return <Navigate to="/student" replace />;
+  }
+
+  return <>{children}</>;
+};
+
+// Root redirect based on authentication
+const RootRedirect = () => {
+  const { user, isAuthenticated } = useAuth();
+
+  if (!isAuthenticated || !user) {
+    return <LoginPage />;
+  }
+
+  if (user.role === 'admin') return <Navigate to="/admin" replace />;
+  if (user.role === 'teacher') return <Navigate to="/teacher" replace />;
+  if (user.role === 'student') return <Navigate to="/student" replace />;
+
+  return <Navigate to="/" replace />;
+};
+
+export const router = createBrowserRouter([
+  {
+    path: '/',
+    element: <RootRedirect />,
+  },
+
+  // ─── Admin Routes ────────────────────────────────────────────────────────────
+  {
+    path: '/admin',
+    element: (
+      <ProtectedRoute allowedRoles={['admin']}>
+        <AdminLayout />
+      </ProtectedRoute>
+    ),
+    children: [
+      { index: true, element: <AdminDashboard /> },
+      { path: 'students', element: <StudentsPage /> },
+      { path: 'teachers', element: <TeachersPage /> },
+      { path: 'courses', element: <CoursesPage /> },
+      { path: 'batches', element: <BatchesPage /> },
+      { path: 'materials', element: <AdminMaterialsPage /> },
+      { path: 'tests', element: <AdminTestsPage /> },
+      { path: 'fees', element: <FeesPage /> },
+      { path: 'broadcast', element: <NotificationBroadcastPage /> },
+      { path: 'audit-logs', element: <AuditLogsPage /> },
+      { path: 'settings', element: <SettingsPage /> },
+    ],
+  },
+
+  // ─── Teacher Routes ──────────────────────────────────────────────────────────
+  {
+    path: '/teacher',
+    element: (
+      <ProtectedRoute allowedRoles={['teacher']}>
+        <TeacherLayout />
+      </ProtectedRoute>
+    ),
+    children: [
+      { index: true, element: <TeacherDashboard /> },
+      { path: 'batches', element: <MyBatchesPage /> },
+      { path: 'materials', element: <TeacherMaterialsPage /> },
+      { path: 'classes', element: <LiveClassesPage /> },
+      { path: 'tests', element: <TeacherTestsPage /> },
+      { path: 'assignments', element: <AssignmentsPage /> },
+      { path: 'doubts', element: <DoubtsPage /> },
+      { path: 'analytics', element: <AnalyticsPage /> },
+      { path: 'profile', element: <TeacherProfilePage /> },
+    ],
+  },
+
+  // ─── Student Routes ──────────────────────────────────────────────────────────
+  {
+    path: '/student',
+    element: (
+      <ProtectedRoute allowedRoles={['student']}>
+        <StudentLayout />
+      </ProtectedRoute>
+    ),
+    children: [
+      { index: true, element: <StudentDashboard /> },
+      { path: 'courses', element: <StudentCoursesPage /> },
+      { path: 'materials', element: <MaterialsPage /> },
+      { path: 'classes', element: <StudentLiveClassesPage /> },
+      { path: 'tests', element: <StudentTestsPage /> },
+      { path: 'results', element: <ResultsPage /> },
+      { path: 'assignments', element: <StudentAssignmentsPage /> },
+      { path: 'doubts', element: <StudentDoubtsPage /> },
+      { path: 'fees', element: <StudentFeesPage /> },
+      { path: 'profile', element: <ProfilePage /> },
+    ],
+  },
+
+  // ─── 404 ─────────────────────────────────────────────────────────────────────
+  {
+    path: '*',
+    element: (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-6xl font-bold text-gray-900">404</h1>
+          <p className="text-xl text-muted-foreground mt-4">Page not found</p>
+          <button
+            onClick={() => window.location.href = '/'}
+            className="mt-6 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+          >
+            Go Home
+          </button>
+        </div>
+      </div>
+    ),
+  },
+]);

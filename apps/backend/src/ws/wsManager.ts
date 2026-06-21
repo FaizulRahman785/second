@@ -1,0 +1,77 @@
+// SSE (Server-Sent Events) manager — replaces WebSocket for real-time notifications.
+// SSE is pure HTTP, works through any proxy (including Replit's), and is server-to-client only
+// which is exactly what the notification system needs.
+
+import type { Response } from 'express';
+
+interface SseClient {
+  res: Response;
+  userId: string;
+  role: string;
+}
+
+const clients = new Map<string, Set<SseClient>>();
+
+function addClient(userId: string, role: string, res: Response): SseClient {
+  const client: SseClient = { res, userId, role };
+  if (!clients.has(userId)) clients.set(userId, new Set());
+  clients.get(userId)!.add(client);
+  return client;
+}
+
+function removeClient(userId: string, client: SseClient) {
+  clients.get(userId)?.delete(client);
+  if (clients.get(userId)?.size === 0) clients.delete(userId);
+}
+
+function send(client: SseClient, event: object) {
+  try {
+    client.res.write(`data: ${JSON.stringify(event)}\n\n`);
+  } catch {}
+}
+
+// Register an SSE connection. Returns a cleanup function.
+export function registerSseClient(userId: string, role: string, res: Response): () => void {
+  const client = addClient(userId, role, res);
+  // Send a connected acknowledgement
+  send(client, { type: 'connected', userId, role });
+  return () => removeClient(userId, client);
+}
+
+// Send a notification event to a specific user (all their open tabs)
+export function emitToUser(userId: string, event: object) {
+  const payload = { type: 'notification', data: event };
+  clients.get(userId)?.forEach((c) => send(c, payload));
+}
+
+// Send to all clients of a given role
+export function emitToRole(role: string, event: object) {
+  const payload = { type: 'notification', data: event };
+  clients.forEach((userClients) => {
+    userClients.forEach((c) => {
+      if (c.role === role) send(c, payload);
+    });
+  });
+}
+
+// Send to a list of userIds
+export function emitToUsers(userIds: string[], event: object) {
+  const payload = { type: 'notification', data: event };
+  userIds.forEach((uid) => {
+    clients.get(uid)?.forEach((c) => send(c, payload));
+  });
+}
+
+// Broadcast to every connected client
+export function emitToAll(event: object) {
+  const payload = { type: 'notification', data: event };
+  clients.forEach((userClients) => {
+    userClients.forEach((c) => send(c, payload));
+  });
+}
+
+export function getSseStats() {
+  let total = 0;
+  clients.forEach((s) => { total += s.size; });
+  return { connectedUsers: clients.size, totalConnections: total };
+}

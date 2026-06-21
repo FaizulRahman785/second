@@ -1,0 +1,3 @@
+- [Coaching Platform Architecture](coaching-platform.md) — full-stack SaaS: React+Vite frontend (port 5000) + Express backend (port 3001), Drizzle ORM + PostgreSQL, JWT auth, 3 role portals.
+- [Phase 1 Pagination API Design](phase1-pagination.md) — all admin list endpoints upgraded to server-side pagination; response format, helper functions, and N+1 fix patterns.
+- [Phase 2 Real-time Notifications — SSE](phase2-realtime.md) — use SSE not WebSocket in Replit (proxy blocks WS upgrades); SSE manager, stream endpoint, doubt reply flow, frontend hook.

@@ -1,0 +1,501 @@
+You are my senior SaaS full-stack architect and production engineer.
+
+Continue the existing Coaching Management Platform.
+
+IMPORTANT:
+DO NOT rebuild the project.
+DO NOT create a new architecture.
+DO NOT replace existing working features.
+
+First deeply analyze the current codebase:
+- folder structure
+- database schema
+- API routes
+- frontend pages
+- authentication flow
+- security implementation
+- PWA setup
+
+Continue exactly from the current checkpoint.
+
+Current completed architecture:
+
+apps/student
+apps/teacher
+apps/admin
+apps/backend
+
+Shared:
+- one backend
+- one database
+- JWT authentication
+- RBAC permissions
+- PostgreSQL
+- PWA support
+
+Already completed:
+
+Authentication
+Role dashboards
+Students
+Teachers
+Courses
+Subjects
+Chapters
+Batches
+Batch assignments
+Materials
+File uploads
+Live classes
+Tests
+MCQ question builder
+Student test taking
+Timer
+Autosave answers
+Results
+Teacher analytics
+Assignments
+Assignment grading
+Doubts
+Fees
+Receipts
+Notifications
+Broadcast notifications
+Audit logs
+Basic security hardening
+PWA foundation
+
+
+Your task now:
+
+Move this from working SaaS to production-ready SaaS.
+
+==================================================
+PHASE 1 — COMPLETE DATA SCALABILITY
+==================================================
+
+Convert all large data features from client-side handling to production server-side handling.
+
+Implement:
+
+Pagination
+Search
+Filtering
+Sorting
+
+For:
+
+Admin students
+Admin teachers
+Courses
+Batches
+Payments
+Results
+Notifications
+Audit logs
+Materials
+Tests
+
+Backend must handle queries.
+
+Frontend should never load thousands of records.
+
+
+Add:
+
+Database indexes
+
+Optimize queries
+
+Remove N+1 query problems
+
+
+==================================================
+PHASE 2 — COMPLETE CLOUDINARY PRODUCTION STORAGE
+==================================================
+
+Upgrade file system.
+
+Implement proper Cloudinary architecture:
+
+Folders:
+
+students/profile/
+teachers/profile/
+materials/pdf/
+assignments/
+receipts/
+cms/
+
+
+Add:
+
+Secure uploads
+
+Signed URLs where needed
+
+File ownership checking
+
+File delete synchronization
+
+File replace flow
+
+
+Validate:
+
+File size
+
+File type
+
+MIME type
+
+
+Never trust frontend upload validation.
+
+
+==================================================
+PHASE 3 — AUTHENTICATION FINAL SECURITY
+==================================================
+
+Upgrade authentication system.
+
+Implement:
+
+HTTP-only secure cookies
+
+Refresh token rotation
+
+Access token expiration
+
+Session table
+
+Device/session management
+
+Logout single device
+
+Logout all devices
+
+Failed login attempt tracking
+
+Temporary account lock
+
+Password reset token expiry
+
+
+Protect against:
+
+Token theft
+
+Brute force attacks
+
+Session abuse
+
+
+==================================================
+PHASE 4 — ADVANCED ADMIN DASHBOARD
+==================================================
+
+Upgrade admin dashboard from management panel to SaaS control center.
+
+Add:
+
+Student growth chart
+
+Monthly revenue analytics
+
+Pending fee analytics
+
+Course popularity
+
+Teacher activity analytics
+
+Test performance overview
+
+Storage usage
+
+Recent activities timeline
+
+
+Add export:
+
+Student reports
+
+Payment reports
+
+Results reports
+
+
+Support:
+
+CSV/PDF export
+
+
+==================================================
+PHASE 5 — ADVANCED TEACHER ANALYTICS
+==================================================
+
+Upgrade teacher analytics.
+
+Create:
+
+Student intelligence profile
+
+
+Show:
+
+Overall performance
+
+Subject performance
+
+Chapter weakness
+
+Strong topics
+
+Average marks
+
+Progress graph
+
+Test history
+
+Assignment history
+
+
+Batch analytics:
+
+Top performers
+
+Students needing attention
+
+Average score comparison
+
+
+==================================================
+PHASE 6 — ADVANCED STUDENT EXPERIENCE
+==================================================
+
+Upgrade student dashboard.
+
+Make it feel like a learning app.
+
+Dashboard should answer:
+
+"What should I study today?"
+
+
+Add:
+
+Today's learning plan
+
+Upcoming classes
+
+Pending assignments
+
+Recommended revision
+
+Recent performance
+
+Study progress
+
+
+Improve:
+
+PDF viewer
+
+Result charts
+
+Progress tracking
+
+Notification experience
+
+
+==================================================
+PHASE 7 — WEBSITE CMS COMPLETION
+==================================================
+
+Complete admin controlled website settings.
+
+Admin controls:
+
+Homepage banner
+
+Institute details
+
+Faculty showcase
+
+Gallery
+
+Testimonials
+
+Results showcase
+
+Contact details
+
+Social links
+
+Theme settings
+
+
+No code changes should be required for content updates.
+
+
+==================================================
+PHASE 8 — PWA FINAL APP EXPERIENCE
+==================================================
+
+Complete app-like experience.
+
+Add:
+
+Custom install popup:
+
+"Install App for Better Performance"
+
+
+Add:
+
+Update available notification
+
+Offline screen
+
+Cache management
+
+App icons
+
+Splash screens
+
+
+Test:
+
+Android
+
+iOS
+
+Desktop
+
+
+==================================================
+PHASE 9 — PRODUCTION MONITORING
+==================================================
+
+Add:
+
+Central logging
+
+Error tracking
+
+API performance monitoring
+
+Database monitoring
+
+
+Track:
+
+Failed API requests
+
+Slow queries
+
+Login failures
+
+Important admin actions
+
+
+==================================================
+PHASE 10 — DEPLOYMENT PREPARATION
+==================================================
+
+Prepare final deployment.
+
+Frontend:
+
+Vercel ready
+
+Separate deployments:
+
+student.domain.com
+teacher.domain.com
+admin.domain.com
+
+
+Backend:
+
+Azure ready
+
+api.domain.com
+
+
+Cloudflare:
+
+DNS
+SSL
+Caching
+Security rules
+
+
+Prepare:
+
+Production environment variables
+
+Build scripts
+
+Deployment documentation
+
+
+==================================================
+FINAL QUALITY AUDIT
+==================================================
+
+Check every page:
+
+Mobile responsive
+
+Loading state
+
+Empty state
+
+Error state
+
+Permission denied state
+
+Expired session handling
+
+
+Security audit:
+
+No exposed secrets
+
+No unprotected APIs
+
+No frontend-only permissions
+
+No fake data
+
+
+Performance audit:
+
+Fast loading
+
+Optimized queries
+
+Optimized images
+
+
+Rules:
+
+- Preserve existing code
+- Upgrade only
+- No duplicate systems
+- No mock data
+- No shortcuts
+- Production quality only
+
+
+Before each phase explain:
+1. Existing implementation found
+2. Files that will change
+3. Database changes
+4. API changes
+
+Then implement.
+
+Start with PHASE 1.
+Complete phases one by one.

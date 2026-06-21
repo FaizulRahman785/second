@@ -1,0 +1,228 @@
+Act as my senior SaaS full-stack engineer.
+
+Continue the Coaching Management Platform from the current codebase.
+
+IMPORTANT:
+Do not rebuild.
+Do not change architecture.
+Analyze existing files first.
+
+Current architecture is correct:
+
+apps/student
+apps/teacher
+apps/admin
+apps/backend
+
+Continue from existing implementation.
+
+Goal:
+Move from MVP to production-ready SaaS.
+
+Complete remaining modules one by one.
+
+================================================
+PHASE A — BACKEND COMPLETION
+================================================
+
+Create missing production APIs:
+
+Courses
+Subjects
+Chapters
+Batches
+Tests
+Questions
+Results
+Assignments
+Doubts
+Fees
+Payments
+Receipts
+Analytics
+Audit Logs
+
+
+For every module:
+
+Create:
+
+- Database schema
+- Routes
+- Controllers
+- Services
+- Validation
+- RBAC permissions
+- Error handling
+
+
+Do not allow frontend-only fake data.
+
+
+================================================
+PHASE B — ADMIN COMPLETION
+================================================
+
+Finish Admin portal:
+
+Teacher management
+
+Student management
+
+Course builder
+
+Subject/chapter builder
+
+Batch assignment
+
+Fee dashboard
+
+Payment history
+
+Receipt generation
+
+Notification broadcast
+
+Website CMS
+
+Audit logs
+
+
+Every page needs:
+
+Search
+Filter
+Pagination
+Loading state
+Empty state
+Error state
+Mobile responsive UI
+
+
+================================================
+PHASE C — TEACHER COMPLETION
+================================================
+
+Complete:
+
+Test creator
+
+Question management
+
+Assignment checking
+
+Student analytics
+
+Batch analytics
+
+Doubt replies
+
+Live class management
+
+
+Add:
+
+Charts
+
+Progress tracking
+
+Performance insights
+
+
+================================================
+PHASE D — STUDENT COMPLETION
+================================================
+
+Complete:
+
+Course learning dashboard
+
+PDF viewer
+
+Test engine
+
+Timer
+
+Autosave answers
+
+Result analytics
+
+Assignment upload
+
+Doubt chat
+
+Fee receipts
+
+
+================================================
+PHASE E — SECURITY HARDENING
+================================================
+
+Upgrade security:
+
+HTTP-only authentication cookies
+
+Refresh tokens
+
+Rate limiting
+
+Input validation
+
+CORS whitelist
+
+Helmet headers
+
+File validation
+
+Ownership checks
+
+Audit tracking
+
+
+Never trust frontend.
+
+
+================================================
+PHASE F — PWA FINALIZATION
+================================================
+
+Make all three apps installable.
+
+Add:
+
+manifest
+
+icons
+
+service worker
+
+offline fallback
+
+install popup
+
+update notification
+
+
+================================================
+QUALITY RULES
+================================================
+
+No placeholders.
+
+No mock data where backend exists.
+
+No duplicate code.
+
+Keep files small.
+
+Reuse components.
+
+Before each phase explain:
+- files changing
+- database changes
+- API changes
+
+Then implement.
+
+Start with PHASE A only.
+Complete module by module.
