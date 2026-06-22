@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router';
 import { useAuth } from '../../contexts/AuthContext';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -10,6 +11,7 @@ import { api } from '../../lib/api';
 
 export const LoginPage: React.FC = () => {
   const { login } = useAuth();
+  const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -20,7 +22,11 @@ export const LoginPage: React.FC = () => {
     if (!email || !password) return;
     try {
       setIsLoading(true);
-      await login(email, password);
+      const user = await login(email, password);
+
+if (user.role === 'admin') navigate('/admin');
+if (user.role === 'teacher') navigate('/teacher');
+if (user.role === 'student') navigate('/student');
     } catch {
     } finally {
       setIsLoading(false);
