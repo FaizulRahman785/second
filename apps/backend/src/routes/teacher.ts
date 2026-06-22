@@ -213,8 +213,38 @@ router.post('/tests', asyncHandler(async (req, res) => {
 
 router.put('/tests/:id', asyncHandler(async (req, res) => {
   const { title, description, status, startDate, endDate } = req.body;
+
+  // Fetch current test to detect publish transition
+  const [currentTest] = await db.select().from(schema.tests)
+    .where(and(eq(schema.tests.id, req.params.id), eq(schema.tests.teacherId, req.user!.id))).limit(1);
+  if (!currentTest) throw new ApiError(404, 'Test not found');
+
   await db.update(schema.tests).set({ title, description, status, startDate, endDate, updatedAt: new Date() })
-    .where(and(eq(schema.tests.id, req.params.id), eq(schema.tests.teacherId, req.user!.id)));
+    .where(eq(schema.tests.id, req.params.id));
+
+  // If publishing for the first time, notify all students in the batch
+  if (status === 'published' && currentTest.status !== 'published' && currentTest.batchId) {
+    const students = await db.select({ id: schema.users.id })
+      .from(schema.batchStudents)
+      .innerJoin(schema.users, eq(schema.batchStudents.studentId, schema.users.id))
+      .where(eq(schema.batchStudents.batchId, currentTest.batchId));
+
+    if (students.length > 0) {
+      const studentIds = students.map(s => s.id);
+      const testTitle = title ?? currentTest.title;
+      const notifValues = studentIds.map(id => ({
+        receiverId: id, senderId: req.user!.id,
+        type: 'test_published',
+        title: '📝 New Test Available',
+        message: `"${testTitle}" is now available. Good luck!`,
+        link: '/student/tests',
+      }));
+      await db.insert(schema.notifications).values(notifValues);
+      const wsEvent = { type: 'test_published', title: '📝 New Test Available', message: `"${testTitle}" is now available. Good luck!`, link: '/student/tests', createdAt: new Date().toISOString(), isRead: false };
+      emitToUsers(studentIds, wsEvent);
+    }
+  }
+
   res.json({ success: true, message: 'Test updated' });
 }));
 
@@ -454,6 +484,94 @@ router.get('/analytics', asyncHandler(async (req, res) => {
   });
 }));
 
+// ── Student Progress (per batch) ───────────────────────────────────────────
+router.get('/batches/:batchId/students/progress', asyncHandler(async (req, res) => {
+  const { batchId } = req.params;
+
+  // Verify teacher belongs to this batch
+  const [membership] = await db.select().from(schema.batchTeachers)
+    .where(and(eq(schema.batchTeachers.batchId, batchId), eq(schema.batchTeachers.teacherId, req.user!.id))).limit(1);
+  if (!membership) throw new ApiError(403, 'You are not a teacher of this batch');
+
+  // Fetch all data in parallel with SQL aggregation (no N+1)
+  const [students, batchTests, batchAssignments] = await Promise.all([
+    db.select({ id: schema.users.id, name: schema.users.name, email: schema.users.email, enrolledAt: schema.batchStudents.enrolledAt })
+      .from(schema.batchStudents)
+      .innerJoin(schema.users, eq(schema.batchStudents.studentId, schema.users.id))
+      .where(eq(schema.batchStudents.batchId, batchId))
+      .orderBy(schema.users.name),
+    db.select({ id: schema.tests.id }).from(schema.tests).where(eq(schema.tests.batchId, batchId)),
+    db.select({ id: schema.assignments.id }).from(schema.assignments).where(eq(schema.assignments.batchId, batchId)),
+  ]);
+
+  if (students.length === 0) return res.json({ success: true, data: [], totalTests: 0, totalAssignments: 0 });
+
+  const studentIds = students.map(s => s.id);
+  const testIds = batchTests.map(t => t.id);
+  const assignmentIds = batchAssignments.map(a => a.id);
+
+  const [testAggRows, assignmentAggRows, doubtAggRows] = await Promise.all([
+    testIds.length > 0
+      ? db.select({
+          studentId: schema.testResults.studentId,
+          attempted: count(),
+          avgPct: sql<number>`ROUND(AVG(${schema.testResults.percentage}), 1)`,
+          bestPct: sql<number>`ROUND(MAX(${schema.testResults.percentage}), 1)`,
+        })
+        .from(schema.testResults)
+        .where(and(inArray(schema.testResults.testId, testIds), inArray(schema.testResults.studentId, studentIds)))
+        .groupBy(schema.testResults.studentId)
+      : Promise.resolve([]),
+    assignmentIds.length > 0
+      ? db.select({
+          studentId: schema.assignmentSubmissions.studentId,
+          submitted: count(),
+          graded: sql<number>`SUM(CASE WHEN ${schema.assignmentSubmissions.status} = 'graded' THEN 1 ELSE 0 END)`,
+          avgMarks: sql<number>`ROUND(AVG(CASE WHEN ${schema.assignmentSubmissions.marksAwarded} IS NOT NULL THEN ${schema.assignmentSubmissions.marksAwarded} END), 1)`,
+        })
+        .from(schema.assignmentSubmissions)
+        .where(and(inArray(schema.assignmentSubmissions.assignmentId, assignmentIds), inArray(schema.assignmentSubmissions.studentId, studentIds)))
+        .groupBy(schema.assignmentSubmissions.studentId)
+      : Promise.resolve([]),
+    db.select({
+        studentId: schema.doubts.studentId,
+        total: count(),
+        open: sql<number>`SUM(CASE WHEN ${schema.doubts.status} = 'open' THEN 1 ELSE 0 END)`,
+        answered: sql<number>`SUM(CASE WHEN ${schema.doubts.status} IN ('answered', 'resolved') THEN 1 ELSE 0 END)`,
+      })
+      .from(schema.doubts)
+      .where(inArray(schema.doubts.studentId, studentIds))
+      .groupBy(schema.doubts.studentId),
+  ]);
+
+  const testMap = new Map(testAggRows.map(r => [r.studentId, r]));
+  const asgMap = new Map(assignmentAggRows.map(r => [r.studentId, r]));
+  const doubtMap = new Map(doubtAggRows.map(r => [r.studentId, r]));
+
+  const data = students.map(s => {
+    const t = testMap.get(s.id);
+    const a = asgMap.get(s.id);
+    const d = doubtMap.get(s.id);
+    const avgPct = Number(t?.avgPct ?? 0);
+    const grade = avgPct >= 90 ? 'A+' : avgPct >= 80 ? 'A' : avgPct >= 70 ? 'B' : avgPct >= 60 ? 'C' : avgPct > 0 ? 'D' : '—';
+    return {
+      studentId: s.id, name: s.name, email: s.email, enrolledAt: s.enrolledAt,
+      testsAttempted: Number(t?.attempted ?? 0),
+      avgTestScore: avgPct,
+      bestTestScore: Number(t?.bestPct ?? 0),
+      assignmentsSubmitted: Number(a?.submitted ?? 0),
+      assignmentsGraded: Number(a?.graded ?? 0),
+      avgAssignmentMarks: Number(a?.avgMarks ?? 0),
+      totalDoubts: Number(d?.total ?? 0),
+      openDoubts: Number(d?.open ?? 0),
+      answeredDoubts: Number(d?.answered ?? 0),
+      grade,
+    };
+  });
+
+  res.json({ success: true, data, totalTests: testIds.length, totalAssignments: assignmentIds.length });
+}));
+
 // ── Test Results ───────────────────────────────────────────────────────────
 router.get('/tests/:testId/results', asyncHandler(async (req, res) => {
   const data = await db
@@ -467,6 +585,129 @@ router.get('/tests/:testId/results', asyncHandler(async (req, res) => {
     .where(eq(schema.testResults.testId, req.params.testId))
     .orderBy(desc(schema.testResults.submittedAt));
   res.json({ success: true, data });
+}));
+
+// ── Attendance ──────────────────────────────────────────────────────────────
+// Create a new attendance session
+router.post('/attendance/sessions', asyncHandler(async (req, res) => {
+  const { batchId, title, sessionDate, topic } = req.body;
+  if (!batchId || !title || !sessionDate) throw new ApiError(400, 'batchId, title, and sessionDate are required');
+
+  // Verify teacher is in batch
+  const [membership] = await db.select().from(schema.batchTeachers)
+    .where(and(eq(schema.batchTeachers.batchId, batchId), eq(schema.batchTeachers.teacherId, req.user!.id))).limit(1);
+  if (!membership) throw new ApiError(403, 'You are not a teacher of this batch');
+
+  // Get all students in batch
+  const students = await db.select({ id: schema.users.id, name: schema.users.name })
+    .from(schema.batchStudents)
+    .innerJoin(schema.users, eq(schema.batchStudents.studentId, schema.users.id))
+    .where(eq(schema.batchStudents.batchId, batchId))
+    .orderBy(schema.users.name);
+
+  const [session] = await db.insert(schema.attendanceSessions).values({
+    batchId, teacherId: req.user!.id, title, sessionDate: new Date(sessionDate), topic,
+  }).returning();
+
+  // Pre-populate records with 'present' for all students
+  if (students.length > 0) {
+    await db.insert(schema.attendanceRecords).values(
+      students.map(s => ({ sessionId: session.id, studentId: s.id, status: 'present' as const }))
+    );
+  }
+
+  res.json({ success: true, data: { session, students } });
+}));
+
+// List sessions for a batch
+router.get('/attendance/sessions', asyncHandler(async (req, res) => {
+  const { batchId } = req.query as { batchId: string };
+  if (!batchId) throw new ApiError(400, 'batchId is required');
+
+  const [membership] = await db.select().from(schema.batchTeachers)
+    .where(and(eq(schema.batchTeachers.batchId, batchId), eq(schema.batchTeachers.teacherId, req.user!.id))).limit(1);
+  if (!membership) throw new ApiError(403, 'You are not a teacher of this batch');
+
+  const sessions = await db.select({
+    id: schema.attendanceSessions.id,
+    title: schema.attendanceSessions.title,
+    sessionDate: schema.attendanceSessions.sessionDate,
+    topic: schema.attendanceSessions.topic,
+    createdAt: schema.attendanceSessions.createdAt,
+    totalRecords: count(schema.attendanceRecords.id),
+    presentCount: sql<number>`SUM(CASE WHEN ${schema.attendanceRecords.status} = 'present' THEN 1 ELSE 0 END)`,
+    absentCount: sql<number>`SUM(CASE WHEN ${schema.attendanceRecords.status} = 'absent' THEN 1 ELSE 0 END)`,
+    lateCount: sql<number>`SUM(CASE WHEN ${schema.attendanceRecords.status} = 'late' THEN 1 ELSE 0 END)`,
+  })
+    .from(schema.attendanceSessions)
+    .leftJoin(schema.attendanceRecords, eq(schema.attendanceSessions.id, schema.attendanceRecords.sessionId))
+    .where(eq(schema.attendanceSessions.batchId, batchId))
+    .groupBy(schema.attendanceSessions.id)
+    .orderBy(desc(schema.attendanceSessions.sessionDate));
+
+  res.json({ success: true, data: sessions });
+}));
+
+// Get single session with all records
+router.get('/attendance/sessions/:sessionId', asyncHandler(async (req, res) => {
+  const { sessionId } = req.params;
+  const [session] = await db.select().from(schema.attendanceSessions).where(eq(schema.attendanceSessions.id, sessionId)).limit(1);
+  if (!session) throw new ApiError(404, 'Session not found');
+
+  const [membership] = await db.select().from(schema.batchTeachers)
+    .where(and(eq(schema.batchTeachers.batchId, session.batchId), eq(schema.batchTeachers.teacherId, req.user!.id))).limit(1);
+  if (!membership) throw new ApiError(403, 'Not authorized');
+
+  const records = await db.select({
+    id: schema.attendanceRecords.id,
+    studentId: schema.attendanceRecords.studentId,
+    studentName: schema.users.name,
+    status: schema.attendanceRecords.status,
+    note: schema.attendanceRecords.note,
+  })
+    .from(schema.attendanceRecords)
+    .innerJoin(schema.users, eq(schema.attendanceRecords.studentId, schema.users.id))
+    .where(eq(schema.attendanceRecords.sessionId, sessionId))
+    .orderBy(schema.users.name);
+
+  res.json({ success: true, data: { session, records } });
+}));
+
+// Update attendance records for a session
+router.put('/attendance/sessions/:sessionId', asyncHandler(async (req, res) => {
+  const { sessionId } = req.params;
+  const { records } = req.body as { records: { studentId: string; status: 'present' | 'absent' | 'late'; note?: string }[] };
+  if (!records || !Array.isArray(records)) throw new ApiError(400, 'records array is required');
+
+  const [session] = await db.select().from(schema.attendanceSessions).where(eq(schema.attendanceSessions.id, sessionId)).limit(1);
+  if (!session) throw new ApiError(404, 'Session not found');
+
+  const [membership] = await db.select().from(schema.batchTeachers)
+    .where(and(eq(schema.batchTeachers.batchId, session.batchId), eq(schema.batchTeachers.teacherId, req.user!.id))).limit(1);
+  if (!membership) throw new ApiError(403, 'Not authorized');
+
+  // Upsert each record
+  for (const r of records) {
+    await db.update(schema.attendanceRecords)
+      .set({ status: r.status, note: r.note ?? null })
+      .where(and(eq(schema.attendanceRecords.sessionId, sessionId), eq(schema.attendanceRecords.studentId, r.studentId)));
+  }
+
+  res.json({ success: true, message: 'Attendance saved' });
+}));
+
+// Delete a session
+router.delete('/attendance/sessions/:sessionId', asyncHandler(async (req, res) => {
+  const { sessionId } = req.params;
+  const [session] = await db.select().from(schema.attendanceSessions).where(eq(schema.attendanceSessions.id, sessionId)).limit(1);
+  if (!session) throw new ApiError(404, 'Session not found');
+
+  const [membership] = await db.select().from(schema.batchTeachers)
+    .where(and(eq(schema.batchTeachers.batchId, session.batchId), eq(schema.batchTeachers.teacherId, req.user!.id))).limit(1);
+  if (!membership) throw new ApiError(403, 'Not authorized');
+
+  await db.delete(schema.attendanceSessions).where(eq(schema.attendanceSessions.id, sessionId));
+  res.json({ success: true, message: 'Session deleted' });
 }));
 
 export default router;

@@ -10,8 +10,15 @@ router.use(authenticate, requireStudent);
 // ── Dashboard ──────────────────────────────────────────────────────────────
 router.get('/dashboard', asyncHandler(async (req, res) => {
   const studentId = req.user!.id;
+  const { sql: sqlFn, count } = await import('drizzle-orm');
 
-  const [recentResults, upcomingClasses, recentMaterials, myFees] = await Promise.all([
+  // Get student's batches first (needed for scoped queries)
+  const myBatches = await db.select({ batchId: schema.batchStudents.batchId })
+    .from(schema.batchStudents).where(eq(schema.batchStudents.studentId, studentId));
+  const batchIds = myBatches.map(b => b.batchId);
+
+  const [recentResults, upcomingClasses, recentMaterials, myFees, upcomingAssignments, openDoubts, availableTests, attendanceSummary] = await Promise.all([
+    // Recent graded test results
     db.select({
       id: schema.testResults.id, marksObtained: schema.testResults.marksObtained,
       percentage: schema.testResults.percentage, submittedAt: schema.testResults.submittedAt,
@@ -19,20 +26,27 @@ router.get('/dashboard', asyncHandler(async (req, res) => {
     })
       .from(schema.testResults)
       .leftJoin(schema.tests, eq(schema.testResults.testId, schema.tests.id))
-      .where(eq(schema.testResults.studentId, studentId))
+      .where(and(eq(schema.testResults.studentId, studentId), eq(schema.testResults.status, 'graded')))
       .orderBy(desc(schema.testResults.submittedAt))
       .limit(5),
-    db.select({
-      id: schema.liveClasses.id, title: schema.liveClasses.title,
-      scheduledDate: schema.liveClasses.scheduledDate, scheduledTime: schema.liveClasses.scheduledTime,
-      meetingLink: schema.liveClasses.meetingLink, status: schema.liveClasses.status,
-      teacherName: schema.users.name,
-    })
-      .from(schema.liveClasses)
-      .leftJoin(schema.users, eq(schema.liveClasses.teacherId, schema.users.id))
-      .where(eq(schema.liveClasses.status, 'scheduled'))
-      .orderBy(schema.liveClasses.scheduledDate)
-      .limit(5),
+
+    // Upcoming live classes in my batches
+    batchIds.length > 0
+      ? db.select({
+          id: schema.liveClasses.id, title: schema.liveClasses.title,
+          scheduledDate: schema.liveClasses.scheduledDate, scheduledTime: schema.liveClasses.scheduledTime,
+          meetingLink: schema.liveClasses.meetingLink, status: schema.liveClasses.status,
+          teacherName: schema.users.name, batchName: schema.batches.name,
+        })
+          .from(schema.liveClasses)
+          .leftJoin(schema.users, eq(schema.liveClasses.teacherId, schema.users.id))
+          .leftJoin(schema.batches, eq(schema.liveClasses.batchId, schema.batches.id))
+          .where(and(eq(schema.liveClasses.status, 'scheduled'), inArray(schema.liveClasses.batchId, batchIds)))
+          .orderBy(schema.liveClasses.scheduledDate)
+          .limit(5)
+      : Promise.resolve([]),
+
+    // Recent materials
     db.select({
       id: schema.materials.id, title: schema.materials.title, fileType: schema.materials.fileType,
       fileName: schema.materials.fileName, fileUrl: schema.materials.fileUrl, createdAt: schema.materials.createdAt,
@@ -43,15 +57,84 @@ router.get('/dashboard', asyncHandler(async (req, res) => {
       .where(eq(schema.materials.visibility, true))
       .orderBy(desc(schema.materials.createdAt))
       .limit(5),
+
+    // Fee status
     db.select({ finalAmount: schema.fees.finalAmount, dueDate: schema.fees.dueDate })
       .from(schema.fees)
       .where(eq(schema.fees.studentId, studentId))
       .limit(1),
+
+    // Upcoming assignments (due in future) I haven't submitted yet
+    batchIds.length > 0
+      ? db.select({
+          id: schema.assignments.id, title: schema.assignments.title,
+          dueDate: schema.assignments.dueDate, totalMarks: schema.assignments.totalMarks,
+          batchName: schema.batches.name, courseName: schema.courses.name,
+        })
+          .from(schema.assignments)
+          .leftJoin(schema.batches, eq(schema.assignments.batchId, schema.batches.id))
+          .leftJoin(schema.courses, eq(schema.assignments.courseId, schema.courses.id))
+          .where(and(inArray(schema.assignments.batchId, batchIds), sqlFn`${schema.assignments.dueDate} > NOW()`))
+          .orderBy(schema.assignments.dueDate)
+          .limit(5)
+      : Promise.resolve([]),
+
+    // Open doubts count
+    db.select({ total: count() })
+      .from(schema.doubts)
+      .where(and(eq(schema.doubts.studentId, studentId), eq(schema.doubts.status, 'open'))),
+
+    // Published tests in my batches
+    batchIds.length > 0
+      ? db.select({ total: count() })
+          .from(schema.tests)
+          .where(and(inArray(schema.tests.batchId, batchIds), eq(schema.tests.status, 'published')))
+      : Promise.resolve([{ total: 0 }]),
+
+    // Attendance summary: present/total sessions in my batches
+    batchIds.length > 0
+      ? db.select({
+          total: count(schema.attendanceRecords.id),
+          present: sqlFn<number>`SUM(CASE WHEN ${schema.attendanceRecords.status} = 'present' THEN 1 ELSE 0 END)`,
+          late: sqlFn<number>`SUM(CASE WHEN ${schema.attendanceRecords.status} = 'late' THEN 1 ELSE 0 END)`,
+        })
+          .from(schema.attendanceRecords)
+          .innerJoin(schema.attendanceSessions, eq(schema.attendanceRecords.sessionId, schema.attendanceSessions.id))
+          .where(and(eq(schema.attendanceRecords.studentId, studentId), inArray(schema.attendanceSessions.batchId, batchIds)))
+      : Promise.resolve([{ total: 0, present: 0, late: 0 }]),
   ]);
+
+  // Filter upcoming assignments to exclude already-submitted ones
+  let pendingAssignments = upcomingAssignments;
+  if (upcomingAssignments.length > 0) {
+    const submittedIds = (await db.select({ assignmentId: schema.assignmentSubmissions.assignmentId })
+      .from(schema.assignmentSubmissions)
+      .where(and(
+        eq(schema.assignmentSubmissions.studentId, studentId),
+        inArray(schema.assignmentSubmissions.assignmentId, upcomingAssignments.map((a: any) => a.id))
+      ))).map(s => s.assignmentId);
+    pendingAssignments = upcomingAssignments.filter((a: any) => !submittedIds.includes(a.id));
+  }
+
+  const att = attendanceSummary[0] ?? { total: 0, present: 0, late: 0 };
+  const attendancePct = Number(att.total) > 0
+    ? Math.round((Number(att.present) + Number(att.late)) / Number(att.total) * 100)
+    : null;
 
   res.json({
     success: true,
-    data: { recentResults, upcomingClasses, recentMaterials, feeStatus: myFees[0] ?? null },
+    data: {
+      recentResults,
+      upcomingClasses,
+      recentMaterials,
+      feeStatus: myFees[0] ?? null,
+      pendingAssignments,
+      openDoubtsCount: Number(openDoubts[0]?.total ?? 0),
+      availableTestsCount: Number(availableTests[0]?.total ?? 0),
+      attendancePct,
+      attendanceSessions: Number(att.total),
+      myBatchCount: batchIds.length,
+    },
   });
 }));
 

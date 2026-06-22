@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { eq, desc, and, count } from 'drizzle-orm';
+import { eq, desc, and, count, lt } from 'drizzle-orm';
 import { db, schema } from '../db/index.js';
 import { authenticate } from '../middleware/auth.js';
 import { asyncHandler, ApiError } from '../middleware/error.js';
@@ -39,12 +39,19 @@ router.get('/stream', (req, res) => {
 router.use(authenticate);
 
 router.get('/', asyncHandler(async (req, res) => {
+  const { type, before, limit: limitStr } = req.query as Record<string, string>;
+  const limit = Math.min(Number(limitStr) || 30, 50);
+
+  const conditions: any[] = [eq(schema.notifications.receiverId, req.user!.id)];
+  if (type && type !== 'all') conditions.push(eq(schema.notifications.type, type));
+  if (before) conditions.push(lt(schema.notifications.createdAt, new Date(before)));
+
   const data = await db
     .select()
     .from(schema.notifications)
-    .where(eq(schema.notifications.receiverId, req.user!.id))
+    .where(and(...conditions))
     .orderBy(desc(schema.notifications.createdAt))
-    .limit(30);
+    .limit(limit);
   res.json({ success: true, data });
 }));
 

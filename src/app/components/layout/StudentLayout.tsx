@@ -26,6 +26,7 @@ import {
   User,
   Settings,
   GraduationCap,
+  Bell,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { NotificationBell } from './NotificationBell';
@@ -40,6 +41,7 @@ const navigation = [
   { name: 'Assignments', href: '/student/assignments', icon: BookOpen },
   { name: 'Ask Doubt', href: '/student/doubts', icon: MessageCircle },
   { name: 'Fees', href: '/student/fees', icon: DollarSign },
+  { name: 'Notifications', href: '/student/notifications', icon: Bell },
   { name: 'My Profile', href: '/student/profile', icon: User },
 ];
 

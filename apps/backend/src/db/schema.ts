@@ -321,6 +321,31 @@ export const payments = pgTable('payments', {
   paidAtIdx: index('payments_paid_at_idx').on(t.paidAt),
 }));
 
+// ── Attendance ─────────────────────────────────────────────────────────────
+export const attendanceSessions = pgTable('attendance_sessions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  batchId: uuid('batch_id').notNull().references(() => batches.id, { onDelete: 'cascade' }),
+  teacherId: uuid('teacher_id').notNull().references(() => users.id),
+  title: text('title').notNull(),
+  sessionDate: timestamp('session_date').notNull(),
+  topic: text('topic'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (t) => ({
+  batchIdIdx: index('attendance_sessions_batch_id_idx').on(t.batchId),
+  sessionDateIdx: index('attendance_sessions_session_date_idx').on(t.sessionDate),
+}));
+
+export const attendanceRecords = pgTable('attendance_records', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  sessionId: uuid('session_id').notNull().references(() => attendanceSessions.id, { onDelete: 'cascade' }),
+  studentId: uuid('student_id').notNull().references(() => users.id),
+  status: text('status', { enum: ['present', 'absent', 'late'] }).notNull().default('present'),
+  note: text('note'),
+}, (t) => ({
+  sessionIdIdx: index('attendance_records_session_id_idx').on(t.sessionId),
+  studentIdIdx: index('attendance_records_student_id_idx').on(t.studentId),
+}));
+
 // ── Audit Logs ─────────────────────────────────────────────────────────────
 export const auditLogs = pgTable('audit_logs', {
   id: uuid('id').primaryKey().defaultRandom(),

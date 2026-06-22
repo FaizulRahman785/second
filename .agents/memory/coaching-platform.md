@@ -89,6 +89,27 @@ description: Key decisions, API shapes, and deployment facts for the Coaching Ma
 - `AuditLogsPage` at `/admin/audit-logs` — paginated, filterable by entity, shows action badge colored by type
 - `logAudit()` called on: student/teacher CREATE/DELETE, payment CREATE, batch members, subject CREATE/DELETE, notification BROADCAST
 
+## New Tables (migration runs on startup in database.ts)
+- `attendance_sessions`: batchId, teacherId, title, sessionDate, topic
+- `attendance_records`: sessionId, studentId, status (present/absent/late), note
+- Migration is `CREATE TABLE IF NOT EXISTS` — safe to run repeatedly on every startup
+
+## New Pages
+- `/teacher/progress` — Student Progress Dashboard (per-batch test avg, assignment completion, doubts, grade)
+- `/teacher/attendance` — Attendance Tracking (create sessions, mark per-student status, inline notes)
+- `/student/notifications` — Full notification history with type filter + pagination (cursor via `before` param)
+- `/admin/live-classes` — Admin Live Classes view (all sessions, search+status filter, meeting link)
+
+## New Backend Endpoints
+- `GET /teacher/batches/:batchId/students/progress` — aggregated per-student metrics (no N+1)
+- `POST/GET/PUT/DELETE /teacher/attendance/sessions` — full CRUD for attendance sessions + records
+- `GET /notifications?type=&before=&limit=` — paginated, type-filtered, cursor-based
+- Test publish SSE: `PUT /teacher/tests/:id` now fires SSE + inserts notifications to all batch students on draft→published transition
+
+## Student Dashboard Improvements
+- Now shows: stat cards (available tests, pending assignments, open doubts, attendance %), upcoming assignments (due-sorted, unsubmitted only, scoped to student's batches), batch-scoped live classes
+- Backend dashboard enriched with batchIds-scoped queries for all sections
+
 ## What's Still Missing / Next to Build
 1. Subjects/Chapters builder in Admin Courses UI (backend done, frontend CoursesPage not updated)
 2. PDF viewer inline for materials (currently just links)

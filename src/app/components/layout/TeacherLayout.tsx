@@ -12,6 +12,8 @@ import {
   DropdownMenuTrigger,
 } from '../ui/dropdown-menu';
 import {
+  TrendingUp,
+  CalendarCheck,
   LayoutDashboard,
   FileText,
   Video,
@@ -38,6 +40,8 @@ const navigation = [
   { name: 'Assignments', href: '/teacher/assignments', icon: BookOpen },
   { name: 'Doubts', href: '/teacher/doubts', icon: MessageCircle },
   { name: 'Analytics', href: '/teacher/analytics', icon: BarChart3 },
+  { name: 'Student Progress', href: '/teacher/progress', icon: TrendingUp },
+  { name: 'Attendance', href: '/teacher/attendance', icon: CalendarCheck },
 ];
 
 export const TeacherLayout: React.FC = () => {

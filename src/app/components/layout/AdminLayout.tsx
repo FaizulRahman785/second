@@ -27,6 +27,7 @@ import {
   Calendar,
   Megaphone,
   Shield,
+  Video,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { NotificationBell } from './NotificationBell';
@@ -40,6 +41,7 @@ const navigation = [
   { name: 'Materials', href: '/admin/materials', icon: FileText },
   { name: 'Tests', href: '/admin/tests', icon: BookOpen },
   { name: 'Fees', href: '/admin/fees', icon: DollarSign },
+  { name: 'Live Classes', href: '/admin/live-classes', icon: Video },
   { name: 'Broadcast', href: '/admin/broadcast', icon: Megaphone },
   { name: 'Audit Logs', href: '/admin/audit-logs', icon: Shield },
   { name: 'Settings', href: '/admin/settings', icon: Settings },

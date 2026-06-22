@@ -28,6 +28,10 @@ import { AssignmentsPage } from './pages/teacher/AssignmentsPage';
 import { DoubtsPage } from './pages/teacher/DoubtsPage';
 import { AnalyticsPage } from './pages/teacher/AnalyticsPage';
 import { TeacherProfilePage } from './pages/teacher/TeacherProfilePage';
+import { StudentProgressPage } from './pages/teacher/StudentProgressPage';
+import { AttendancePage } from './pages/teacher/AttendancePage';
+import { NotificationsPage } from './pages/student/NotificationsPage';
+import { AdminLiveClassesPage } from './pages/admin/AdminLiveClassesPage';
 
 // Student Pages
 import { StudentDashboard } from './pages/student/StudentDashboard';
@@ -97,6 +101,7 @@ export const router = createBrowserRouter([
       { path: 'tests', element: <AdminTestsPage /> },
       { path: 'fees', element: <FeesPage /> },
       { path: 'broadcast', element: <NotificationBroadcastPage /> },
+      { path: 'live-classes', element: <AdminLiveClassesPage /> },
       { path: 'audit-logs', element: <AuditLogsPage /> },
       { path: 'settings', element: <SettingsPage /> },
     ],
@@ -119,6 +124,8 @@ export const router = createBrowserRouter([
       { path: 'assignments', element: <AssignmentsPage /> },
       { path: 'doubts', element: <DoubtsPage /> },
       { path: 'analytics', element: <AnalyticsPage /> },
+      { path: 'progress', element: <StudentProgressPage /> },
+      { path: 'attendance', element: <AttendancePage /> },
       { path: 'profile', element: <TeacherProfilePage /> },
     ],
   },
@@ -141,6 +148,7 @@ export const router = createBrowserRouter([
       { path: 'assignments', element: <StudentAssignmentsPage /> },
       { path: 'doubts', element: <StudentDoubtsPage /> },
       { path: 'fees', element: <StudentFeesPage /> },
+      { path: 'notifications', element: <NotificationsPage /> },
       { path: 'profile', element: <ProfilePage /> },
     ],
   },
