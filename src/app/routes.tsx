@@ -76,14 +76,18 @@ const RootRedirect = () => {
 
   return <Navigate to="/" replace />;
 };
-
 export const router = createBrowserRouter([
   {
     path: '/',
     element: <RootRedirect />,
   },
 
-  // ─── Admin Routes ────────────────────────────────────────────────────────────
+  {
+    path: '/login',
+    element: <LoginPage />,
+  },
+
+  // ─── Admin Routes
   {
     path: '/admin',
     element: (
