@@ -64,19 +64,23 @@ const ProtectedRoute = ({ children, allowedRoles }: { children: React.ReactNode;
 
 // Root redirect based on authentication
 const LoginRoute = () => {
+  // clear any existing token when hitting login
   localStorage.removeItem('token');
   return <LoginPage />;
 };
 
+const RootRedirect = () => {
+  const { user, isAuthenticated } = useAuth();
+
   if (!isAuthenticated || !user) {
-    return <LoginPage />;
+    return <Navigate to="/login" replace />;
   }
 
   if (user.role === 'admin') return <Navigate to="/admin" replace />;
   if (user.role === 'teacher') return <Navigate to="/teacher" replace />;
   if (user.role === 'student') return <Navigate to="/student" replace />;
 
-  return <Navigate to="/" replace />;
+  return <Navigate to="/login" replace />;
 };
 export const router = createBrowserRouter([
   {
