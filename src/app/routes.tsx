@@ -64,9 +64,24 @@ const ProtectedRoute = ({ children, allowedRoles }: { children: React.ReactNode;
 
 // Root redirect based on authentication
 const LoginRoute = () => {
+  const { user, isAuthenticated } = useAuth();
+
+  if (isAuthenticated && user) {
+    if (user.role === 'admin') {
+      return <Navigate to="/admin" replace />;
+    }
+
+    if (user.role === 'teacher') {
+      return <Navigate to="/teacher" replace />;
+    }
+
+    if (user.role === 'student') {
+      return <Navigate to="/student" replace />;
+    }
+  }
+
   return <LoginPage />;
 };
-
 const RootRedirect = () => {
   const { user, isAuthenticated } = useAuth();
 
