@@ -1,4 +1,5 @@
-const BASE_URL = '/api';
+const BASE_URL =
+  import.meta.env.VITE_API_URL || "https://second-2-qx77.onrender.com/api";
 
 function getToken(): string | null {
   return localStorage.getItem('token');
