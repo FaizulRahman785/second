@@ -12,7 +12,7 @@
       <meta name="theme-color" content="#2563eb" />
       <style>html, body { height: 100%; margin: 0; } #root { height: 100%; }</style>
       
-      <script type="module" crossorigin src="/assets/index-Bwm7Msom.js"></script>
+      <script type="module" crossorigin src="/assets/index-Bxnd14fK.js"></script>
       <link rel="stylesheet" crossorigin href="/assets/index-DXQbF3Qm.css">
     </head>
 
@@ -20,9 +20,17 @@
       
       <div id="root"></div>
       <script>
+        // Replace any old service worker with a safe asset-only service worker,
+        // then register the new worker so we don't serve a stale index.html.
         if ('serviceWorker' in navigator) {
-          window.addEventListener('load', () => {
-            navigator.serviceWorker.register('/sw.js').catch(() => {});
+          window.addEventListener('load', async () => {
+            try {
+              const regs = await navigator.serviceWorker.getRegistrations();
+              await Promise.all(regs.map((r) => r.unregister()));
+            } catch (e) {}
+            try {
+              await navigator.serviceWorker.register('/sw.js');
+            } catch (e) {}
           });
         }
       </script>

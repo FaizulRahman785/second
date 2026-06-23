@@ -1,4 +1,5 @@
 import { useEffect, useRef, useCallback } from 'react';
+import { BASE_URL } from '../lib/api';
 
 export type RealtimeNotificationEvent = {
   id: string;
@@ -36,8 +37,9 @@ export function useRealtimeNotifications({ onNotification, enabled = true }: Opt
     const token = localStorage.getItem('token');
     if (!token) return;
 
-    // SSE endpoint — auth via query param (EventSource doesn't support headers)
-    const url = `/api/notifications/stream?token=${encodeURIComponent(token)}`;
+    // SSE endpoint — use absolute backend URL and auth via query param
+    const base = BASE_URL.replace(/\/+$/, '');
+    const url = `${base}/notifications/stream?token=${encodeURIComponent(token)}`;
 
     try {
       const es = new EventSource(url);

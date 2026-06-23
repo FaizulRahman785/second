@@ -19,17 +19,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const checkSession = async () => {
       try {
         const token = localStorage.getItem('token');
+        const cached = localStorage.getItem('user');
+        if (cached) {
+          try {
+            setUser(JSON.parse(cached) as User);
+          } catch {
+            localStorage.removeItem('user');
+          }
+        }
+
         if (!token) return;
+
         const res = await api.auth.me();
         if (res.success && res.data) {
           setUser(res.data as User);
+          localStorage.setItem('user', JSON.stringify(res.data));
         } else {
           localStorage.removeItem('token');
           localStorage.removeItem('user');
+          setUser(null);
         }
       } catch {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
+        setUser(null);
       } finally {
         setIsLoading(false);
       }
@@ -45,6 +58,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       localStorage.setItem('user', JSON.stringify(res.user));
       setUser(res.user as User);
       toast.success(`Welcome back, ${res.user.name}!`);
+      return res.user as User;
     } catch (error: any) {
       toast.error(error.message || 'Login failed. Please check your credentials.');
       throw error;

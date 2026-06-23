@@ -19,9 +19,17 @@
       <div id="root"></div>
       <script type="module" src="/src/main.tsx"></script>
       <script>
+        // Replace any old service worker with a safe asset-only service worker,
+        // then register the new worker so we don't serve a stale index.html.
         if ('serviceWorker' in navigator) {
-          window.addEventListener('load', () => {
-            navigator.serviceWorker.register('/sw.js').catch(() => {});
+          window.addEventListener('load', async () => {
+            try {
+              const regs = await navigator.serviceWorker.getRegistrations();
+              await Promise.all(regs.map((r) => r.unregister()));
+            } catch (e) {}
+            try {
+              await navigator.serviceWorker.register('/sw.js');
+            } catch (e) {}
           });
         }
       </script>

@@ -5,8 +5,9 @@ import { Button } from '../../components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { Loader2, Bell, CheckCheck, BellRing, Megaphone, BookOpen, ClipboardList, Video, DollarSign, MessageCircle } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
+import { api } from '../../lib/api';
 
-const authHeader = () => ({ Authorization: `Bearer ${localStorage.getItem('token')}` });
+  const authHeader = () => ({ Authorization: `Bearer ${localStorage.getItem('token')}` });
 
 const TYPE_META: Record<string, { icon: React.ReactNode; color: string; label: string }> = {
   broadcast:        { icon: <Megaphone className="h-4 w-4" />,     color: 'text-purple-600 bg-purple-50',  label: 'Broadcast' },
@@ -42,7 +43,7 @@ export const NotificationsPage: React.FC = () => {
       if (type !== 'all') params.set('type', type);
       if (!reset && cursorRef.current) params.set('before', cursorRef.current);
 
-      const r = await fetch(`/api/notifications?${params}`, { headers: authHeader() }).then(x => x.json());
+      const r = await api.notifications.getAll(Object.fromEntries(params));
       if (r.success) {
         const data: any[] = r.data;
         setNotifications(prev => reset ? data : [...prev, ...data]);
@@ -56,13 +57,13 @@ export const NotificationsPage: React.FC = () => {
   useEffect(() => { fetchPage(true, typeFilter); }, [typeFilter, fetchPage]);
 
   const markRead = async (id: string) => {
-    await fetch(`/api/notifications/${id}/read`, { method: 'PATCH', headers: authHeader() });
+    await api.notifications.markRead(id);
     setNotifications(prev => prev.map(n => n.id === id ? { ...n, isRead: true } : n));
   };
 
   const markAllRead = async () => {
     setMarkingAll(true);
-    await fetch('/api/notifications/read-all', { method: 'PATCH', headers: authHeader() });
+    await api.notifications.markAllRead();
     setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
     setMarkingAll(false);
   };
