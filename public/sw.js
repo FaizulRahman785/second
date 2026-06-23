@@ -1,9 +1,24 @@
-const CACHE_NAME = 'coachpro-v2';
-const STATIC_ASSETS = ['/', '/index.html', '/manifest.json'];
+const CACHE_NAME = 'coachpro-assets-v1';
+const FALLBACK_ASSETS = ['/manifest.json', '/offline.html', '/icon-192.svg', '/icon-512.svg'];
+
+// At install we will fetch `/precache-manifest.json` (generated at build time)
+// and cache the listed files. If the manifest is missing, we fall back to
+// caching the small `FALLBACK_ASSETS` set to avoid failure.
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(STATIC_ASSETS).catch(() => {}))
+    (async () => {
+      const cache = await caches.open(CACHE_NAME);
+      try {
+        const res = await fetch('/precache-manifest.json');
+        if (res.ok) {
+          const list = await res.json();
+          await cache.addAll(list);
+          return;
+        }
+      } catch (e) {}
+      try { await cache.addAll(FALLBACK_ASSETS); } catch (e) {}
+    })()
   );
   self.skipWaiting();
 });
@@ -24,28 +39,24 @@ self.addEventListener('fetch', (event) => {
   // Never cache API calls or auth
   if (url.pathname.startsWith('/api/')) return;
 
-  // Network-first for navigation (HTML)
+  // Navigation requests: try network first, fallback to offline page
   if (event.request.mode === 'navigate') {
     event.respondWith(
       fetch(event.request)
         .then((res) => {
-          if (res.ok) {
-            const clone = res.clone();
-            caches.open(CACHE_NAME).then((c) => c.put(event.request, clone));
-          }
           return res;
         })
-        .catch(() => caches.match('/index.html'))
+        .catch(() => caches.match('/offline.html'))
     );
     return;
   }
 
-  // Cache-first for static assets (JS/CSS/fonts/images)
+  // Cache-first for static assets (manifest, icons)
   event.respondWith(
     caches.match(event.request).then((cached) => {
       if (cached) return cached;
       return fetch(event.request).then((res) => {
-        if (res.ok) {
+        if (res && res.ok) {
           const clone = res.clone();
           caches.open(CACHE_NAME).then((c) => c.put(event.request, clone));
         }

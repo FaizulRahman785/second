@@ -8,12 +8,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '../../components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../components/ui/table';
 import { Loader2, CalendarCheck, Plus, CheckCircle2, XCircle, Clock, Edit, Trash2, ChevronRight } from 'lucide-react';
-import { api } from '../../lib/api';
+import { api, BASE_URL } from '../../lib/api';
 import { format } from 'date-fns';
 
 const authHeader = () => ({ Authorization: `Bearer ${localStorage.getItem('token')}` });
-const apiFetch = (url: string, opts?: RequestInit) =>
-  fetch(url, { ...opts, headers: { 'Content-Type': 'application/json', ...authHeader(), ...(opts?.headers ?? {}) } }).then(r => r.json());
+const apiFetch = (url: string, opts?: RequestInit) => {
+  // url may be like '/api/teacher/...' — strip leading /api to join with BASE_URL which already contains /api
+  const path = url.startsWith('/api') ? url.slice(4) : url;
+  return fetch(`${BASE_URL}${path}`, { ...opts, headers: { 'Content-Type': 'application/json', ...authHeader(), ...(opts?.headers ?? {}) } }).then(r => r.json());
+};
 
 const STATUS_STYLES: Record<string, { color: string; icon: React.ReactNode; label: string }> = {
   present: { color: 'bg-green-100 text-green-700 border-green-200', icon: <CheckCircle2 className="h-3.5 w-3.5" />, label: 'Present' },

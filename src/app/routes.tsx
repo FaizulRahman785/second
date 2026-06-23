@@ -47,10 +47,13 @@ import { ProfilePage } from './pages/student/ProfilePage';
 
 // Protected Route Component
 const ProtectedRoute = ({ children, allowedRoles }: { children: React.ReactNode; allowedRoles: string[] }) => {
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, isLoading } = useAuth();
+
+  // While auth is loading, don't redirect — let provider finish checking
+  if (isLoading) return null;
 
   if (!isAuthenticated || !user) {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/login" replace />;
   }
 
   if (!allowedRoles.includes(user.role)) {
@@ -64,7 +67,9 @@ const ProtectedRoute = ({ children, allowedRoles }: { children: React.ReactNode;
 
 // Root redirect based on authentication
 const LoginRoute = () => {
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, isLoading } = useAuth();
+
+  if (isLoading) return null;
 
   if (isAuthenticated && user) {
     if (user.role === 'admin') {
@@ -83,7 +88,9 @@ const LoginRoute = () => {
   return <LoginPage />;
 };
 const RootRedirect = () => {
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, isLoading } = useAuth();
+
+  if (isLoading) return null;
 
   if (!isAuthenticated || !user) {
     return <Navigate to="/login" replace />;

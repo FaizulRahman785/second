@@ -1,4 +1,4 @@
-const BASE_URL =
+export const BASE_URL =
   import.meta.env.VITE_API_URL || "https://second-2-qx77.onrender.com/api";
 
 function getToken(): string | null {
@@ -75,7 +75,7 @@ export const api = {
 
   // Notifications
   notifications: {
-    getAll: () => request<any>('/notifications'),
+    getAll: (params?: Record<string, any>) => request<any>(`/notifications${buildQuery(params)}`),
     getUnreadCount: () => request<any>('/notifications/unread-count'),
     markRead: (id: string) => request<any>(`/notifications/${id}/read`, { method: 'PATCH' }),
     markAllRead: () => request<any>('/notifications/read-all', { method: 'PATCH' }),

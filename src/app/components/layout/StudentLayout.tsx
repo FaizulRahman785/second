@@ -53,7 +53,7 @@ export const StudentLayout: React.FC = () => {
 
   const handleLogout = () => {
     logout();
-    navigate('/');
+    navigate('/login');
   };
 
   return (

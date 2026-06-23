@@ -1,0 +1,36 @@
+name: Deploy backend to Render
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Setup pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@latest --activate
+      - name: Install
+        run: pnpm install --frozen-lockfile || pnpm install
+      - name: Build backend
+        run: pnpm --prefix apps/backend run build
+      - name: Deploy to Render (Create or Trigger Deploy)
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
+        run: |
+          if [ -z "$RENDER_API_KEY" ] || [ -z "$RENDER_SERVICE_ID" ]; then
+            echo "Set RENDER_API_KEY and RENDER_SERVICE_ID in repository secrets to enable deploys.";
+            exit 0;
+          fi
+          curl -s -X POST "https://api.render.com/deploy/srv-${RENDER_SERVICE_ID}/deploys" \
+            -H "Authorization: Bearer ${RENDER_API_KEY}" \
+            -H "Content-Type: application/json" \
+            -d '{"clearCache": false}'
