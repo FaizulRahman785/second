@@ -7,11 +7,11 @@ import { config } from '../config/env.js';
 import type { AuthUser } from '../../../../packages/shared-types/src/index';
 
 const jwtSignOptions: jwt.SignOptions = {
-  expiresIn: config.jwtExpiresIn,
+  expiresIn: config.jwtExpiresIn as jwt.SignOptions['expiresIn'],
 };
 
 const jwtRefreshSignOptions: jwt.SignOptions = {
-  expiresIn: config.jwtRefreshExpiresIn,
+  expiresIn: config.jwtRefreshExpiresIn as jwt.SignOptions['expiresIn'],
 };
 
 export function generateToken(payload: AuthUser): string {

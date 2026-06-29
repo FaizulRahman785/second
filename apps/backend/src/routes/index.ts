@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import type { Router as ExpressRouter } from 'express';
 import authRoutes from './auth.js';
 import adminRoutes from './admin.js';
 import teacherRoutes from './teacher.js';
@@ -7,7 +8,7 @@ import seedRoutes from './seed.js';
 import uploadRoutes from './upload.js';
 import notificationRoutes from './notifications.js';
 
-const router = Router();
+const router: ExpressRouter = Router();
 
 router.get('/health', (req, res) => {
   res.json({ success: true, message: 'API is running', timestamp: new Date().toISOString() });

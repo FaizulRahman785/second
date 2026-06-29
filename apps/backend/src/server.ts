@@ -7,10 +7,11 @@ import { config, validateEnv } from './config/env.js';
 import { connectDatabase } from './config/database.js';
 import routes from './routes/index.js';
 import { errorHandler, notFoundHandler } from './middleware/error.js';
+import type { Express } from 'express';
 
 validateEnv();
 
-const app = express();
+const app: Express = express();
 
 // Trust proxy (needed for Replit + rate limiting to correctly identify clients)
 app.set('trust proxy', 1);

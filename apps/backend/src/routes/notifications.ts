@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import type { Router as ExpressRouter } from 'express';
 import { eq, desc, and, count, lt } from 'drizzle-orm';
 import { db, schema } from '../db/index.js';
 import { authenticate } from '../middleware/auth.js';
@@ -6,7 +7,7 @@ import { asyncHandler, ApiError } from '../middleware/error.js';
 import { emitToUsers, registerSseClient } from '../ws/wsManager.js';
 import { verifyToken } from '../utils/jwt.js';
 
-const router = Router();
+const router: ExpressRouter = Router();
 
 // ── SSE stream (auth via query param since EventSource has no custom headers) ──
 router.get('/stream', (req, res) => {

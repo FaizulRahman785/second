@@ -1,9 +1,10 @@
 import { Router } from 'express';
+import type { Router as ExpressRouter } from 'express';
 import { db, schema } from '../db/index.js';
 import { hashPassword } from '../utils/password.js';
 import { asyncHandler } from '../middleware/error.js';
 
-const router = Router();
+const router: ExpressRouter = Router();
 
 router.post('/demo', asyncHandler(async (req, res) => {
   // Wipe existing data

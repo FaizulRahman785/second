@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import type { Router as ExpressRouter } from 'express';
 import { eq, desc, count, sql, and, ne, ilike, or, asc, inArray } from 'drizzle-orm';
 import { db, schema } from '../db/index.js';
 import { hashPassword } from '../utils/password.js';
@@ -27,7 +28,7 @@ function paginationMeta(total: number, page: number, limit: number) {
   return { page, limit, total, totalPages: Math.ceil(total / limit) };
 }
 
-const router = Router();
+const router: ExpressRouter = Router();
 router.use(authenticate, requireAdmin);
 
 // ── Dashboard Stats ────────────────────────────────────────────────────────

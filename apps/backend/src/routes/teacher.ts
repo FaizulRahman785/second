@@ -1,11 +1,12 @@
 import { Router } from 'express';
+import type { Router as ExpressRouter } from 'express';
 import { eq, desc, count, and, sql, inArray } from 'drizzle-orm';
 import { db, schema } from '../db/index.js';
 import { authenticate, requireTeacher } from '../middleware/auth.js';
 import { asyncHandler, ApiError } from '../middleware/error.js';
 import { emitToUser, emitToUsers } from '../ws/wsManager.js';
 
-const router = Router();
+const router: ExpressRouter = Router();
 router.use(authenticate, requireTeacher);
 
 // ── Dashboard ──────────────────────────────────────────────────────────────

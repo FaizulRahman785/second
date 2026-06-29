@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import type { Router as ExpressRouter } from 'express';
 import { eq } from 'drizzle-orm';
 import { db, schema } from '../db/index.js';
 import { comparePassword, hashPassword } from '../utils/password.js';
@@ -6,7 +7,7 @@ import { generateToken, generateRefreshToken, verifyToken } from '../utils/jwt.j
 import { authenticate } from '../middleware/auth.js';
 import { asyncHandler, ApiError } from '../middleware/error.js';
 
-const router = Router();
+const router: ExpressRouter = Router();
 
 // POST /api/auth/login
 router.post('/login', asyncHandler(async (req, res) => {

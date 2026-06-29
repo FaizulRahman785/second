@@ -1,11 +1,12 @@
 import { Router } from 'express';
+import type { Router as ExpressRouter } from 'express';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import { authenticate } from '../middleware/auth.js';
 import { asyncHandler } from '../middleware/error.js';
 
-const router = Router();
+const router: ExpressRouter = Router();
 router.use(authenticate);
 
 const uploadsDir = path.join(process.cwd(), 'uploads');
